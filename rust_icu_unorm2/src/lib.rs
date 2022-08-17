@@ -109,6 +109,29 @@ impl UNormalizer {
         Ok(result)
     }
 
+    pub fn normalize_to(
+        &self,
+        input: &[u16],
+        output: &mut [u16]
+        ) -> Result<usize, common::Error> {
+        let mut status = common::Error::OK_CODE;
+        let result: i32 = unsafe {
+            versioned_function!(unorm2_normalize)(
+                self.rep.as_ptr(),
+                input.as_ptr(),
+                input.len() as i32,
+                output.as_mut_ptr(),
+                output.len() as i32,
+                &mut status,
+            )
+        };
+        common::Error::ok_or_warning(status)?;
+        if result < -1 {
+            return Err(common::Error::Sys(sys::UErrorCode::U_BUFFER_OVERFLOW_ERROR));
+        }
+        Ok(result as usize)
+    }
+
     /// Implements `unorm2_composePair`.
     pub fn compose_pair(&self, point1: sys::UChar32, point2: sys::UChar32) -> sys::UChar32 {
         let result: sys::UChar32 = unsafe {
@@ -118,6 +141,26 @@ impl UNormalizer {
         result
     }
 
+    /// Implements `unorm2_getRawDecomposition`.
+    pub fn get_raw_decomposition(
+        &self,
+        point: sys::UChar32,
+    ) -> Result<ustring::UChar, common::Error> {
+        const CAPACITY: usize = 18; // compatibility decomposition of U+FDFA.
+        let mut status = common::Error::OK_CODE;
+        let mut buf: Vec<sys::UChar> = vec![0; CAPACITY];
+        let len = unsafe {
+            versioned_function!(unorm2_getRawDecomposition)(
+                self.rep.as_ptr(), point, buf.as_mut_ptr() as *mut sys::UChar, CAPACITY as i32, &mut status)
+        };
+        common::Error::ok_or_warning(status)?;
+        Ok(if len < 1 {
+            ustring::UChar::new_with_capacity(0)
+        } else {
+            buf.truncate(len as usize);
+            ustring::UChar::from(buf)
+        })
+    }
 }
 
 #[cfg(test)]
